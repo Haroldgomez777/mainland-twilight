@@ -5,21 +5,33 @@ Engine.LoadLibrary("rmbiome");
 /**
  * Determine player starting positions on a circular pattern.
  */
-function playerPlacementCircleMt(radius, startingAngle = undefined, center = undefined) {
+function playerPlacementCircleMt(radius, startingAngle = undefined, center) {
 	const startAngle = startingAngle !== undefined ? startingAngle : randomAngle();
-	let [playerPositions, playerAngles] = distributePointsOnCircle(getNumPlayers(), startAngle, radius, center || g_Map.getCenter());
+	let [playerPositions, playerAngles] = distributePointsOnCircle(getNumPlayers(), startAngle, radius, center);
 	// Get player IDs
 	let playerIDs = getPlayerIDs();
 
 	// Group players by area (teams stay together)
-	[playerIDs, playerPositions] = groupPlayersByArea(playerIDs, playerPositions);
+	const grouped = groupPlayersByArea(playerIDs, playerPositions);
+
+	// Handle both old and new API shapes
+	if (Array.isArray(grouped)) {
+		// Old rmgen: [playerIDs, playerPositions]
+		[playerIDs, playerPositions] = grouped;
+	} else if (grouped && grouped.playerPositions && grouped.playerIDs) {
+		// New rmgen (Release 28)
+		playerIDs = grouped.playerIDs;
+		playerPositions = grouped.playerPositions;
+	} else {
+		// Fallback: grouping didn't change anything
+		g_Map.log("groupPlayersByArea returned unexpected value, using original positions");
+	}
 
 	return [playerIDs, playerPositions.map(p => p.round()), playerAngles, startAngle];
 }
 
 
-function getSurroundingAreasMt(positions, radius = 35)
-{
+function getSurroundingAreasMt(positions, radius = 35) {
 	return positions.map(pos => createArea(new DiskPlacer(radius, pos), null, null));
 }
 
@@ -27,8 +39,7 @@ function getSurroundingAreasMt(positions, radius = 35)
 /**
  * Hills are elevated, planar, impassable terrain areas.
  */
-function createPassableHillsMt(terrainset, constraints, tileClass, count, minSize, maxSize, spread, failFraction = 0.8, elevation = 50, elevationSmoothing = 20)
-{
+function createPassableHillsMt(terrainset, constraints, tileClass, count, minSize, maxSize, spread, failFraction = 0.8, elevation = 50, elevationSmoothing = 20) {
 	g_Map.log("Creating hills");
 	createAreas(
 		new ChainPlacer(
@@ -67,19 +78,19 @@ function placePlayerFoodBalancedMt(areas, oBerryMain, oBerryStraggler, oMainHunt
 	let mainHuntableFood = GetBaseTemplateDataValue(Engine.GetTemplate(oMainHuntable), foodPath);
 	let secondaryHuntableFood = GetBaseTemplateDataValue(Engine.GetTemplate(oSecondaryHuntable), foodPath);
 	let constraint = new AndConstraint(constraints);
-	let place = function(type, amount, area) {
+	let place = function (type, amount, area) {
 		let group = new SimpleGroup(
-			[new SimpleObject(type, amount, amount, 0,4)],
+			[new SimpleObject(type, amount, amount, 0, 4)],
 			true, clFood
 		);
 		createObjectGroupsByAreas(group, 0, constraints, 1, 300, [area]);
 	};
-	
+
 	let totalFood = randIntInclusive(0, 20) * 100 * foodAvailability;
 	totalFood += Math.max(mainHuntableFood, secondaryHuntableFood) * 5;
 	if (randBool(0.2))
 		totalFood = 0;
-	
+
 	for (let area of areas) {
 		let remainingFood = totalFood;
 		while (remainingFood > 0) {
@@ -104,8 +115,8 @@ function placePlayerFoodBalancedMt(areas, oBerryMain, oBerryStraggler, oMainHunt
 						currentAnimal = oMainHuntable;
 						currentAnimalFood = mainHuntableFood;
 					} else {
-						currentAnimal = oMainHuntable;
-						currentAnimalFood = mainHuntableFood;
+						currentAnimal = oSecondaryHuntable;
+						currentAnimalFood = secondaryHuntableFood;
 					}
 					let maxAmount = remainingFood / currentAnimalFood;
 					let desiredAmount = randIntInclusive(5, 7);
@@ -115,7 +126,7 @@ function placePlayerFoodBalancedMt(areas, oBerryMain, oBerryStraggler, oMainHunt
 					place(currentAnimal, amount, area);
 				} else {
 					let amount = Math.min(remainingFood, 1200) / mainBerryFood;
-					remainingFood -= amount  * mainBerryFood;
+					remainingFood -= amount * mainBerryFood;
 					place(oBerryMain, amount, area);
 				}
 			}
@@ -123,21 +134,20 @@ function placePlayerFoodBalancedMt(areas, oBerryMain, oBerryStraggler, oMainHunt
 	}
 }
 
-function* GenerateMap(mapSettings) {
 
-	// Define the allowed maps
-	const allowedMaps = [
-		"Mainland Twilight",
-	];
-
-	// Check if the current map is in the allowed maps
-	if (!allowedMaps.includes(mapSettings.mapName)) {
-		error("This script is not intended for the current map. Terminating execution.");
-		return;
+export function* generateMap(mapSettings) {
+	const heightLand = 3;
+	const biome = mapSettings?.Biome || currentBiome();
+	setBiome(biome);
+	if (!g_Terrains || !g_Terrains.mainTerrain) {
+		warn("Biome failed, falling back to temperate biome");
+		setBiome("generic/temperate");
 	}
-	setBiome(mapSettings.Biome);
-
 	const tMainTerrain = g_Terrains.mainTerrain;
+	if (!tMainTerrain)
+		throw new Error("Biome failed to initialize mainTerrain");
+	globalThis.g_Map = new RandomMap(heightLand, tMainTerrain);
+
 	const tForestFloor1 = g_Terrains.forestFloor1;
 	const tForestFloor2 = g_Terrains.forestFloor2;
 	const tCliff = g_Terrains.cliff;
@@ -154,11 +164,11 @@ function* GenerateMap(mapSettings) {
 	const oTree3 = g_Gaia.tree3;
 	const oTree4 = g_Gaia.tree4;
 	const oTree5 = g_Gaia.tree5;
-	const sTree1 = g_Gaia.tree6 ?? null;
-	const sTree2 = g_Gaia.tree7 ?? null;
-	const sTree3 = g_Gaia.tree8 ?? null;
-	const sTree4 = g_Gaia.tree9 ?? null;
-	const sTree5 = g_Gaia.tree10 ?? null;
+	const sTree1 = g_Gaia.tree6 || null;
+	const sTree2 = g_Gaia.tree7 || null;
+	const sTree3 = g_Gaia.tree8 || null;
+	const sTree4 = g_Gaia.tree9 || null;
+	const sTree5 = g_Gaia.tree10 || null;
 	const oFruitBush = g_Gaia.fruitBush;
 	const oMainHuntableAnimal = g_Gaia.mainHuntableAnimal;
 	const oSecondaryHuntableAnimal = g_Gaia.secondaryHuntableAnimal;
@@ -177,10 +187,6 @@ function* GenerateMap(mapSettings) {
 	const pForest1 = [tForestFloor2 + TERRAIN_SEPARATOR + oTree1, tForestFloor2 + TERRAIN_SEPARATOR + oTree2, tForestFloor2];
 	const pForest2 = [tForestFloor1 + TERRAIN_SEPARATOR + oTree4, tForestFloor1 + TERRAIN_SEPARATOR + oTree5, tForestFloor1];
 
-	const heightLand = 3;
-
-	globalThis.g_Map = new RandomMap(heightLand, tMainTerrain);
-
 	const numPlayers = getNumPlayers();
 
 	var clPlayer = g_Map.createTileClass();
@@ -192,38 +198,24 @@ function* GenerateMap(mapSettings) {
 	var clFood = g_Map.createTileClass();
 	var clBaseResource = g_Map.createTileClass();
 
-	var playerPositions = playerPlacementCircleMt(fractionToTiles(0.35));
+	const playerPlacements = playerPlacementCircleMt(fractionToTiles(0.35), undefined, g_Map.getCenter());
 	placePlayerBases({
-		"PlayerPlacement": playerPositions,
+		"PlayerPlacement": playerPlacements,
 		"PlayerTileClass": clPlayer,
 		"BaseResourceClass": clBaseResource,
 		"CityPatch": {
 			"outerTerrain": tRoadWild,
 			"innerTerrain": tRoad
 		},
-		"StartingAnimal": {
-		},
-		"Berries": {
-			"template": oFruitBush
-		},
-		"Mines": {
-			"types": [
-				{ "template": oMetalLarge },
-				{ "template": oStoneLarge }
-			]
-		},
-		"Trees": {
-			"template": oTree1,
-			"count": 5
-		},
-		"Decoratives": {
-			"template": aGrassShort
-		}
+		"StartingAnimal": {},
+		"Berries": { "template": oFruitBush },
+		"Mines": { "types": [{ "template": oMetalLarge }, { "template": oStoneLarge }] },
+		"Trees": { "template": oTree1, "count": 5 },
+		"Decoratives": { "template": aGrassShort }
 	});
-	Engine.SetProgress(20);
+
 
 	createBumps(avoidClasses(clPlayer, 20));
-
 	createPassableHillsMt([tCliff, tCliff, tHill], avoidClasses(clPlayer, 20, clHill, 15), clHill, scaleByMapSize(3, 30));
 
 	var [forestTrees, stragglerTrees] = getTreeCounts(...rBiomeTreeCount(1));
@@ -231,9 +223,9 @@ function* GenerateMap(mapSettings) {
 		[tMainTerrain, tForestFloor1, tForestFloor2, pForest1, pForest2],
 		avoidClasses(clPlayer, 20, clForest, 18, clHill, 0),
 		clForest,
-		forestTrees);
+		forestTrees
+	);
 
-	Engine.SetProgress(50);
 
 	g_Map.log("Creating dirt patches");
 	createLayeredPatches(
@@ -242,7 +234,8 @@ function* GenerateMap(mapSettings) {
 		[1, 1],
 		avoidClasses(clForest, 0, clHill, 0, clDirt, 5, clPlayer, 12),
 		scaleByMapSize(15, 45),
-		clDirt);
+		clDirt
+	);
 
 	g_Map.log("Creating grass patches");
 	createPatches(
@@ -250,8 +243,9 @@ function* GenerateMap(mapSettings) {
 		tTier4Terrain,
 		avoidClasses(clForest, 0, clHill, 0, clDirt, 5, clPlayer, 12),
 		scaleByMapSize(15, 45),
-		clDirt);
-	Engine.SetProgress(55);
+		clDirt
+	);
+
 
 	g_Map.log("Creating metal mines");
 	createBalancedMetalMines(
@@ -269,10 +263,8 @@ function* GenerateMap(mapSettings) {
 		avoidClasses(clForest, 1, clPlayer, scaleByMapSize(20, 35), clHill, 1, clMetal, 10)
 	);
 
-	Engine.SetProgress(65);
 
 	var planetm = 1;
-
 	if (currentBiome() == "generic/india")
 		planetm = 8;
 
@@ -291,9 +283,9 @@ function* GenerateMap(mapSettings) {
 			planetm * scaleByMapSize(13, 200),
 			planetm * scaleByMapSize(13, 200)
 		],
-		avoidClasses(clForest, 0, clPlayer, 0, clHill, 0));
+		avoidClasses(clForest, 0, clPlayer, 0, clHill, 0)
+	);
 
-	Engine.SetProgress(70);
 
 	createFood(
 		[
@@ -305,11 +297,9 @@ function* GenerateMap(mapSettings) {
 			3 * numPlayers
 		],
 		avoidClasses(clForest, 0, clPlayer, 45, clHill, 1, clMetal, 4, clRock, 4, clFood, 20),
-		clFood);
+		clFood
+	);
 
-
-
-	Engine.SetProgress(75);
 
 	createFood(
 		[
@@ -319,35 +309,43 @@ function* GenerateMap(mapSettings) {
 			3 * numPlayers
 		],
 		avoidClasses(clForest, 0, clPlayer, 40, clHill, 1, clMetal, 4, clRock, 4, clFood, 10),
-		clFood);
+		clFood
+	);
 
-	if (!isNomad()) {
-		let playerAreas = getSurroundingAreasMt(playerPositions[1]);
-		placePlayerFoodBalancedMt(playerAreas, oFruitBush, null, oMainHuntableAnimal, oSecondaryHuntableAnimal, clFood,
-			avoidClasses(clForest, 0, clPlayer, 25, clHill, 1, clMetal, 4, clRock, 4, clFood, 15));
+	if (false) {
+		let playerAreas = getSurroundingAreasMt(playerPlacements[1]);
+		placePlayerFoodBalancedMt(
+			playerAreas,
+			oFruitBush,
+			null,
+			oMainHuntableAnimal,
+			oSecondaryHuntableAnimal,
+			clFood,
+			avoidClasses(clForest, 0, clPlayer, 25, clHill, 1, clMetal, 4, clRock, 4, clFood, 15)
+		);
 	}
 
-	Engine.SetProgress(85);
 
 	if (sTree1 && sTree2 && sTree3 && sTree4 && sTree5) {
 		createStragglerTrees(
-			[sTree1, sTree2, sTree3, sTree4 && sTree5],
+			[sTree1, sTree2, sTree3, sTree4, sTree5],
 			avoidClasses(clForest, 8, clHill, 1, clPlayer, 12, clMetal, 6, clRock, 6, clFood, 1),
 			clForest,
-			stragglerTrees);
+			stragglerTrees
+		);
 	} else {
-
 		createStragglerTrees(
 			[oTree1, oTree2, oTree4, oTree3],
 			avoidClasses(clForest, 8, clHill, 1, clPlayer, 12, clMetal, 6, clRock, 6, clFood, 1),
 			clForest,
-			stragglerTrees);
+			stragglerTrees
+		);
 	}
 
-
-
 	placePlayersNomad(clPlayer, avoidClasses(clForest, 1, clMetal, 4, clRock, 4, clHill, 4, clFood, 2));
-
+	g_Map.log("Map object created OK");
 	return g_Map;
 }
+
+
 

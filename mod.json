@@ -5,6 +5,6 @@
 	"description": "New random maps based on Mainland map and Belgian uplands, add evening and night mode, passable Hills etc",
 	"ignoreInCompatibilityChecks": true,
 	"dependencies": [
-		"0ad=0.27.0"
+		"0ad=0.28.0"
 	]
 }
