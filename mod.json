@@ -2,7 +2,7 @@
 	"name": "mainland-twilight",
 	"version": "0.3.0",
 	"label": "Mainland Twilight",
-	"description": "New random maps based on Mainland map and Belgian uplands, add evening and night mode, passable Hills etc",
+	"description": "New random maps based on Mainland map and Belgian uplands, add evening and night mode, passable Hills etc. Includes ally attack alarm audio from audi-mod.",
 	"ignoreInCompatibilityChecks": true,
 	"dependencies": [
 		"0ad=0.28.0"
