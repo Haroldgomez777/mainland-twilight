@@ -1,0 +1,17 @@
+2026-06-01 — v0.3.4
+
+ * Target **0 A.D. Alpha 28** (`0ad=0.28.0` in mod.json).
+ * Map scripts updated for Release 28 rmgen: biome init order, `groupPlayersByArea` /
+   `PlayerPlacement`, stock `createFood`, and engine `isNomad()` (no local override).
+ * **audi-mod merged:** custom ally attack alarm at `audio/interface/alarm/alarmally_1.ogg`
+   (from https://github.com/Haroldgomez777/audi-mod).
+ * Added `build-pyromod.ps1` and mod.io-friendly packaging (ZIP store, no `-archivebuild-compress`).
+ * Added source URL in mod.json: https://github.com/Haroldgomez777/mainland-twilight
+ * Readme: install, build, and mod.io troubleshooting notes.
+
+2025 — v0.3.x (earlier)
+
+ * Mainland Twilight and Mainland Fixed Positions random maps.
+ * Evening and night biomes (Rhine Valley fall evening, dark night).
+ * Passable hills on the maximalist map script; lighter fixed-positions variant.
+ * OOS fixes: use public rmgen libraries instead of bundled copies.
