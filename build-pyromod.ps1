@@ -16,13 +16,16 @@
   - Working directory must be the game root when invoking pyrogenesis (script does Set-Location).
   - -archivebuild points at this mod folder (may be under Documents\My Games\0ad\mods\).
   - Only -mod=mod and -mod=public are passed as base layers; do not add -mod=mainland-twilight
-    unless that folder also exists under binaries\data\mods\ in the install (see source comment
-    in 0 A.D. main.cpp about user mod path and archivebuild).
+    unless that folder also exists under binaries\data\mods\ in the install.
+  - Do NOT pass -archivebuild-compress for mod.io releases: Pyrogenesis defaults to ZIP store
+    (matches verified mods on mod.io). Deflate is only for smaller manual downloads.
+  - In-game mod.io downloads also require Wildfire Games to attach metadata_blob + minisig on
+    the mod.io modfile entry (see readme.md "mod.io downloads").
 #>
 [CmdletBinding()]
 param(
 	[string] $GameRoot = $env:ZERO_AD_ROOT,
-	[string] $ModRoot = $(if ($PSScriptRoot) { $PSScriptRoot } else { throw "Run this script with: powershell -File .\build-pyromod.ps1 (so ModRoot can be resolved)." }),
+	[string] $ModRoot = $(if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { Get-Location }),
 	[string] $OutputPath
 )
 
@@ -88,8 +91,7 @@ try {
 		-mod=mod `
 		-mod=public `
 		-archivebuild="$modRootAbs" `
-		-archivebuild-output="$outAbs" `
-		-archivebuild-compress
+		-archivebuild-output="$outAbs"
 	if ($LASTEXITCODE -ne 0) { throw "pyrogenesis exited with code $LASTEXITCODE" }
 }
 finally {

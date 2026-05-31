@@ -17,7 +17,7 @@ The engine can package a mod for sharing (texture cache, optional zip compressio
 From a machine that has **0 A.D. Alpha 28** installed:
 
 ```powershell
-cd "C:\Users\Harold\Documents\My Games\0ad\mods\mainland-twilight"
+cd "C:\Users\[user]\Documents\My Games\0ad\mods\mainland-twilight"
 .\build-pyromod.ps1 -GameRoot "C:\Path\To\Your\0 A.D. alpha"
 ```
 
@@ -25,11 +25,28 @@ Or set `$env:ZERO_AD_ROOT` to the game install folder (the one that contains `bi
 
 Output: **`dist\mainland-twilight-<version>.pyromod`** (version from `mod.json`). Install by double‑opening the file with 0 A.D. or: `pyrogenesis.exe path\to\mainland-twilight-0.x.x.pyromod`.
 
-Equivalent manual command (run **`Set-Location`** to your game root first):
+Do **not** use `-archivebuild-compress` for mod.io uploads. Pyrogenesis defaults to ZIP **store** (same as other verified mods); `-archivebuild-compress` produces deflate and is only for ad‑hoc sharing.
+
+Equivalent manual command (run from your game install root):
 
 ```text
-binaries\system\pyrogenesis.exe -mod=mod -mod=public -archivebuild="C:\...\mods\mainland-twilight" -archivebuild-output="mainland-twilight.pyromod" -archivebuild-compress
+binaries\system\pyrogenesis.exe -mod=mod -mod=public -archivebuild="C:\...\mods\mainland-twilight" -archivebuild-output="mainland-twilight.pyromod"
 ```
+
+## mod.io downloads (“Invalid mod: Failed to get metadata_blob from modFile”)
+
+If **Settings → Mod Selection → Download Mods** shows that error for **mainland-twilight**, the problem is **not** the zip deflate/store format alone. In 0 A.D. **0.28**, the game rejects mod.io entries **before download** when the modfile API response has no valid **`metadata_blob`**.
+
+From [`source/ps/ModIo.cpp`](https://github.com/0ad/0ad/blob/master/source/ps/ModIo.cpp), each mod.io modfile must expose `metadata_blob` as JSON containing at least:
+
+- **`dependencies`** — array (e.g. `["0ad=0.28.0"]`)
+- **`minisigs`** — array with a **minisign** signature of the uploaded `.pyromod`, using Wildfire Games’ signing key (same trust model as other in-game downloadable mods)
+
+That blob is attached when Wildfire **verifies and publishes** the mod on [mod.io](https://mod.io/g/0ad); a raw upload without that step leaves `metadata_blob` empty and the client marks the mod invalid.
+
+**Workaround for players:** install manually — clone or download from [GitHub](https://github.com/Haroldgomez777/mainland-twilight), or open a `.pyromod` built with `build-pyromod.ps1`, then enable the mod in **Mod Selection** (no mod.io needed).
+
+**For maintainers:** after building a new `.pyromod`, send it through the usual Wildfire mod verification / mod.io publishing process so the active modfile gets `metadata_blob` + signature updated. Forum reference: [Guide for publishing mods on mod.io](https://wildfiregames.com/forum/topic/24333-guide-for-publishing-mods-on-modio/).
 
 ## Maps
 
@@ -76,6 +93,7 @@ Same path as the public mod, so this file replaces the default clip. Sourced fro
 
 ## Credits and links
 
+- Source: [github.com/Haroldgomez777/mainland-twilight](https://github.com/Haroldgomez777/mainland-twilight)
 - Forum thread: [Mainland Twilight — new mod for team games](https://wildfiregames.com/forum/topic/96802-mainland-twilight-new-mod-for-team-games/)
 - Earlier inspiration: [Feldfeld Mod / Feldmap](https://wildfiregames.com/forum/topic/53880-feldmap/) — this distribution is a separate, lightweight package aligned with current **Alpha 28** rmgen APIs.
 - Ally alarm audio: [audi-mod](https://github.com/Haroldgomez777/audi-mod).

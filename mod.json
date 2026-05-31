@@ -3,6 +3,7 @@
 	"version": "0.3.4",
 	"label": "Mainland Twilight",
 	"description": "New random maps based on Mainland map and Belgian uplands, add evening and night mode, passable Hills etc. Includes ally attack alarm audio from audi-mod.",
+	"url": "https://github.com/Haroldgomez777/mainland-twilight",
 	"ignoreInCompatibilityChecks": true,
 	"dependencies": [
 		"0ad=0.28.0"
