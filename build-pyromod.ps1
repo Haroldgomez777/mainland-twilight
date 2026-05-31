@@ -21,15 +21,23 @@
     (matches verified mods on mod.io). Deflate is only for smaller manual downloads.
   - In-game mod.io downloads also require Wildfire Games to attach metadata_blob + minisig on
     the mod.io modfile entry (see readme.md "mod.io downloads").
+  - Dev-only files are stripped from the output archive after build: *.ps1, dist/, *.zip, *.pyromod.
 #>
 [CmdletBinding()]
 param(
 	[string] $GameRoot = $env:ZERO_AD_ROOT,
-	[string] $ModRoot = $(if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { Get-Location }),
+	[string] $ModRoot,
 	[string] $OutputPath
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $ModRoot) {
+	if ($PSScriptRoot) { $ModRoot = $PSScriptRoot }
+	elseif ($PSCommandPath) { $ModRoot = Split-Path -Parent $PSCommandPath }
+	elseif ($MyInvocation.MyCommand.Path) { $ModRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
+	else { throw "Could not resolve mod folder; pass -ModRoot or run: powershell -File .\build-pyromod.ps1" }
+}
 
 $modJsonPath = Join-Path $ModRoot "mod.json"
 if (-not (Test-Path $modJsonPath)) { throw "mod.json not found at $modJsonPath" }
@@ -80,23 +88,71 @@ if ([System.IO.Path]::IsPathRooted($OutputPath)) {
 $outDir = Split-Path -Parent $outAbs
 if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
 
+# Pyrogenesis mishandles -archivebuild-output paths with spaces; build beside the exe, then move.
+$buildOut = Join-Path $root "binaries\system\mainland-twilight-$version.pyromod"
+
 Write-Host "Game root:    $root"
 Write-Host "Mod folder:   $modRootAbs"
+Write-Host "Build file:   $buildOut"
 Write-Host "Output file:  $outAbs"
 Write-Host "Running archive build..."
 
-Push-Location $root
+Remove-Item -LiteralPath $buildOut -Force -ErrorAction SilentlyContinue
+
+Push-Location (Join-Path $root "binaries\system")
 try {
 	& $pyro `
 		-mod=mod `
 		-mod=public `
 		-archivebuild="$modRootAbs" `
-		-archivebuild-output="$outAbs"
-	if ($LASTEXITCODE -ne 0) { throw "pyrogenesis exited with code $LASTEXITCODE" }
+		-archivebuild-output="$buildOut"
 }
 finally {
 	Pop-Location
 }
+
+$deadline = (Get-Date).AddSeconds(60)
+while (-not (Test-Path -LiteralPath $buildOut) -and (Get-Date) -lt $deadline) {
+	Start-Sleep -Milliseconds 250
+}
+
+if (-not (Test-Path -LiteralPath $buildOut)) {
+	if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+		throw "pyrogenesis exited with code $LASTEXITCODE and did not create the output file"
+	}
+	throw "Expected output missing: $buildOut"
+}
+
+function Remove-ExcludedPyromodEntries {
+	param([string] $ArchivePath)
+	Add-Type -AssemblyName System.IO.Compression.FileSystem
+	$zip = [System.IO.Compression.ZipFile]::Open($ArchivePath, 'Update')
+	try {
+		$toRemove = @($zip.Entries | Where-Object {
+			$name = ($_.FullName -replace '\\', '/').TrimStart('/')
+			$name -match '(^|/)[^/]+\.ps1$' -or
+			$name -match '^dist/' -or
+			$name -match '(^|/)[^/]+\.zip$' -or
+			$name -match '(^|/)[^/]+\.pyromod$'
+		})
+		foreach ($entry in $toRemove) {
+			Write-Host "  strip: $($entry.FullName)"
+			$entry.Delete()
+		}
+		return $toRemove.Count
+	}
+	finally {
+		$zip.Dispose()
+	}
+}
+
+$stripped = Remove-ExcludedPyromodEntries -ArchivePath $buildOut
+if ($stripped -gt 0) {
+	Write-Host "Removed $stripped dev-only entries from package."
+}
+
+Copy-Item -LiteralPath $buildOut -Destination $outAbs -Force
+Remove-Item -LiteralPath $buildOut -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $outAbs)) { throw "Expected output missing: $outAbs" }
 $item = Get-Item $outAbs

@@ -23,7 +23,7 @@ cd "C:\Users\[user]\Documents\My Games\0ad\mods\mainland-twilight"
 
 Or set `$env:ZERO_AD_ROOT` to the game install folder (the one that contains `binaries\system\pyrogenesis.exe`), then run `.\build-pyromod.ps1` with no arguments.
 
-Output: **`dist\mainland-twilight-<version>.pyromod`** (version from `mod.json`). Install by double‑opening the file with 0 A.D. or: `pyrogenesis.exe path\to\mainland-twilight-0.x.x.pyromod`.
+Output: **`dist\mainland-twilight-<version>.pyromod`**. After packaging, the build script removes dev-only paths from the archive: `*.ps1`, `dist/`, and loose `*.zip` / `*.pyromod` files.
 
 Do **not** use `-archivebuild-compress` for mod.io uploads. Pyrogenesis defaults to ZIP **store** (same as other verified mods); `-archivebuild-compress` produces deflate and is only for ad‑hoc sharing.
 
